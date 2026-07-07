@@ -39,28 +39,33 @@ export async function GET(req: Request) {
 
   let classroomFilter;
 
-  if (classroomId) {
-    // Verify the user is a member of this classroom
-    await requireTeacher(email, classroomId);
+    if (classroomId) {
+        // Verify the user is a member of this classroom
+        await requireTeacher(email, classroomId);
 
-    classroomFilter = eq(doubtsTable.classroomId, classroomId);
-  } else {
-    // Get all classrooms user is a member of
-    const userMemberships = await db
-      .select({ classroomId: membershipsTable.classroomId })
-      .from(membershipsTable)
-      .where(eq(membershipsTable.userEmail, email));
+        classroomFilter = eq(doubtsTable.classroomId, classroomId);
+    } else {
+        // Get all classrooms user is a TEACHER of
+        const userMemberships = await db
+            .select({ classroomId: membershipsTable.classroomId })
+            .from(membershipsTable)
+            .where(
+                and(
+                    eq(membershipsTable.userEmail, email),
+                    inArray(membershipsTable.role, ["teacher", "owner", "admin"]),
+                ),
+            );
 
-    const userClassroomIds = userMemberships.map((m) => m.classroomId);
+        const userClassroomIds = userMemberships.map((m) => m.classroomId);
 
-    if (userClassroomIds.length === 0) {
-      return NextResponse.json({
-        message: "Export route working",
-      });
+        if (userClassroomIds.length === 0) {
+            return NextResponse.json({
+                message: "No classrooms with teacher access",
+            });
+        }
+
+        classroomFilter = inArray(doubtsTable.classroomId, userClassroomIds);
     }
-
-    classroomFilter = inArray(doubtsTable.classroomId, userClassroomIds);
-  }
 
   try {
     // Run all queries in parallel to eliminate sequential query latency
